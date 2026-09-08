@@ -1,0 +1,61 @@
+name: Weekly Job Digest
+
+on:
+  schedule:
+    # Every Monday 06:00 UTC.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print the report instead of sending an email"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright browser
+        run: playwright install --with-deps chromium
+
+      - name: Determine run mode
+        id: mode
+        run: |
+          if [ -z "${{ secrets.GMAIL_ADDRESS }}" ] || [ -z "${{ secrets.GMAIL_APP_PASSWORD }}" ] || [ -z "${{ secrets.GMAIL_TO }}" ]; then
+            echo "Email secrets not configured yet -- forcing dry-run."
+            echo "dry_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "dry_run=${{ github.event.inputs.dry_run || 'false' }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run pipeline (dry run, no email sent)
+        if: steps.mode.outputs.dry_run == 'true'
+        run: python -m scripts.main --dry-run | tee report-output.txt
+
+      - name: Run pipeline (send email)
+        if: steps.mode.outputs.dry_run != 'true'
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          GMAIL_TO: ${{ secrets.GMAIL_TO }}
+        run: python -m scripts.main
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: job-digest-report
+          path: report-output.txt
+          if-no-files-found: ignore

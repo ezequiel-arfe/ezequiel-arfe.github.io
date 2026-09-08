@@ -1,0 +1,28 @@
+name: Inspect Job Sources (dev tool)
+
+# Manual-only diagnostic: fetches robots.txt + a raw sample of each
+# non-API source's page and prints it to the job log, for use when
+# writing or fixing a source parser in scripts/sources/. Not part of the
+# scheduled weekly pipeline.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Inspect sources
+        run: python -m scripts.inspect_sources
